@@ -4,54 +4,75 @@ import (
 	"context"
 	"errors"
 	"os"
+	"time"
 	"urlShortner/core"
 
-	"github.com/go-redis/redis/v8"
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/mongo"
 )
 
 type DbServiceAdapter struct {
-	client      *redis.Client
+	database    *mongo.Database
 	urlShortner core.UrlShortner
 }
 
-func NewDbServiceAdapter(client *redis.Client, urlShortner core.UrlShortner) *DbServiceAdapter {
-	return &DbServiceAdapter{client: client, urlShortner: urlShortner}
+func NewDbServiceAdapter(db *mongo.Database, urlShortner core.UrlShortner) *DbServiceAdapter {
+	return &DbServiceAdapter{database: db, urlShortner: urlShortner}
 }
 
-//Save method takes a url and saves it in database along
-func (db *DbServiceAdapter) Save(url string) (string, error) {
+//Save method takes a url and saves it in database
+func (dba *DbServiceAdapter) Save(url string) (string, error) {
 	ctx := context.Background()
 	url, err := validateUrl(url)
 	if err != nil {
 		return url, err
 	}
-	value, err := db.client.Get(ctx, url).Result()
+	filter := bson.D{{"value", url}}
+	count, err := dba.database.Collection(os.Getenv("COLLECTION_NAME")).CountDocuments(ctx, filter)
 	if err == nil {
-		return value, nil
+		if count != 0 {
+			var urlModel core.Url
+			result := dba.database.Collection(os.Getenv("COLLECTION_NAME")).FindOne(ctx, filter)
+			err = result.Decode(&urlModel)
+			if err != nil {
+				return "", err
+			}
+			return os.Getenv("HOST_ADDRESS") + "/" + urlModel.ShortUrl, nil
+		}
 	}
-	code := db.urlShortner.Create()
-
-	err = db.client.HSet(ctx, "urls", url, code).Err()
+	urlModel := dba.urlShortner.Create()
+	urlModel.Value = url
+	urlModel.Created = time.Now().Round(time.Second).String()
+	result, err := dba.database.Collection(os.Getenv("COLLECTION_NAME")).InsertOne(ctx, *urlModel)
 	if err != nil {
 		return "", err
 	}
-	return os.Getenv("HOST_ADDRESS") + "/" + code, nil
+
+	if result.InsertedID == nil {
+		return "", errors.New("could not insert data")
+	}
+
+	return os.Getenv("HOST_ADDRESS") + "/" + urlModel.ShortUrl, nil
 }
 
 //Get method will fetch actual associated url which was provided as input
 //Here we are providing short url as input and it will fetch original url from database
-func (db *DbServiceAdapter) Get(shortUrl string) (string, error) {
-	var resultUrl string
-	values, err := db.client.HGetAll(context.Background(), "urls").Result()
+func (dba *DbServiceAdapter) Get(shortUrl string) (string, error) {
+	var urlModel core.Url
+	filter := bson.D{{"shorturl", shortUrl}}
+	update := bson.D{{"$set", bson.D{{"updated", time.Now().Round(time.Second).String()}}}}
+	result := dba.database.Collection(os.Getenv("COLLECTION_NAME")).FindOneAndUpdate(context.Background(), filter, update)
+	err := result.Decode(&urlModel)
 	if err != nil {
-		return "", errors.New("url not found")
-	}
-	for k, v := range values {
-		if v == shortUrl {
-			resultUrl = k
-			return k, nil
-		}
+		return "", err
 	}
 
-	return resultUrl, nil
+	// updateReslt, err := dba.database.Collection(os.Getenv("COLLECTION_NAME")).UpdateOne(context.Background(), filter, update)
+	// if err != nil {
+	// 	return "", errors.New("couldn't updated data")
+	// }
+	// if updateReslt.MatchedCount == 0 {
+	// 	return "", errors.New("no match found for update")
+	// }
+	return urlModel.Value, nil
 }

@@ -17,7 +17,8 @@ type UrlControllerAdapter struct {
 
 //Create handler to create short url
 func (c *UrlControllerAdapter) Create(w http.ResponseWriter, r *http.Request) {
-	req := Request{}
+
+	var req Request
 	w.Header().Set("content-type", "application/json")
 	err := json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
@@ -42,5 +43,6 @@ func (c *UrlControllerAdapter) Get(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
+
 	http.Redirect(w, r, url, http.StatusPermanentRedirect)
 }

@@ -4,13 +4,22 @@ import (
 	"github.com/google/uuid"
 )
 
-type UrlShortner interface {
-	Create() string
+type Url struct {
+	Value    string `json:"value" bson:"value"`
+	ShortUrl string `json:"shorturl" bson:"shorturl"`
+	Created  string `json:"created" bson:"created"`
+	Updated  string `json:"updated" bson:"updated"`
 }
 
-type UrlShortnerAdapter struct{}
+type UrlShortner interface {
+	Create() *Url
+}
 
-func (u *UrlShortnerAdapter) Create() string {
-	code := uuid.NewString() // here we are generating a random uuid code
-	return code[24:]         // here we are sending a short code out of complete uuid code
+//type UrlShortnerAdapter struct{}
+
+func (u *Url) Create() *Url {
+	var url Url
+	code := uuid.NewString()
+	url.ShortUrl = code[24:]
+	return &url
 }

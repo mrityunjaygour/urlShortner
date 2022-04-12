@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-//validate fundtion will validate input url string
+//validate function will validate input url string
 func validateUrl(urlString string) (string, error) {
 
 	if urlString == "" {
@@ -15,7 +15,10 @@ func validateUrl(urlString string) (string, error) {
 	if strings.Contains(urlString, "http://.") {
 		return urlString, errors.New("invalid input url")
 	}
-	if !strings.Contains(urlString, "http://") {
+	if strings.Contains(urlString, "https://.") {
+		return urlString, errors.New("invalid input url")
+	}
+	if !strings.Contains(urlString, "http://") && !strings.Contains(urlString, "https://") {
 		urlString = "http://" + urlString
 	}
 	u, err := url.ParseRequestURI(urlString)
